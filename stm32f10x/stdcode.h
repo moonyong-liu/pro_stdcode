@@ -8,6 +8,10 @@
   ******************************************************************************
   * @attention
 	* @updateRecord
+	# who: lHw | when: 20170914 | content:
+	1. add _BufPointer,*_pBufPointer;
+	2. add usartMaintain_VB(),usart_send_VB(),eia485Maintain_VB()
+	3. add IS_UXTX_DATA_LEN_LEGAL
 	# who: lHw | when: 20170829 | content:
 	1. add _FREPackage,DETECAXIS,DETECFLG_AXIS
 	2. add saveFreqAxesCap();
@@ -45,18 +49,22 @@
 /*variable-------------------------------------------------------------------*/
 /*define --------------------------------------------------------------------*/
 
-#define PACKSIZE			256										// Master package size define				
+#define PACKSIZE	  	256										// Master package size define				
 #define MINPACKSIZE   7
-#define DATASIZE      PACKSIZE-MINPACKSIZE
+#define DATASIZE      (PACKSIZE-MINPACKSIZE)
+
+/*DCH*/
+#define DCHSTRLEN     13
+#define AMPMAXLEN     (PACKSIZE-DCHSTRLEN-2)
 
 /* Locomotive system define */
 /* max=32 nodes : 1111 1111 1111 1111 1111 1111 1111 1111*/
 #define NODESUM      0x0000001f        // 485 device number 
 #define NODENUM      5                 // 485 device number
 #define PASSNUM      4                 // H-A axes number
-#define MINJuGeNODE  3        // min juGement 485 device number
+#define MINJuGeNODE  3        				 // min juGement 485 device number
 
-/* count how many 1b */
+/* count how many 1(bit) */
 #define __COUNT(_val,_cnt) while(_val){_val &= _val-1;_cnt++;}
 
 /* magnetic define */
@@ -129,22 +137,30 @@ typedef struct{
 }_JZKPack;
 
 /* dch device struct */
+
+typedef struct{
+	u8 AMPData[AMPMAXLEN];
+}_DCHPackAMP,*_pDCHPackAMP;
+
 typedef struct{
 	u8 Head;					  // 0x40
 	u8 MagneticNu;		  // magnetic number
 	u8 AxisCnt;         // Axis count
-	/* 任意轴触发磁钢A或B的时间间隔 */
-	u8 IntervalsH;		  // intervals high 
-	u8 IntervalsL;		  // intervals low
-	u8 AxisFea; 				// Axis feature
-	u8 AxisPro; 				// Axis proportion
 	/* 两轴时间间隔 */
 	u8 AxesInterTimH;		// intervals high 
 	u8 AxesInterTimL;		// intervals low
+	u8 AxisFea; 				// Axis feature
+	u8 AxisPro; 				// Axis proportion
+	/* 任意轴触发磁钢A或B的时间间隔 */
+	u8 IntervalsH;		  // intervals high 
+	u8 IntervalsL;		  // intervals low
 	u8 Dirc; 					  // Dircetion
 	u8 Version; 				// version
 	u8 CheckSum;			
 	u8 Tail;					  // 0x26
+	u8 AMPType;
+	u8 AMPLen;
+	_DCHPackAMP DCHPackAMP;
 }_DCHPack;
 
 /* over run device struct */
@@ -343,6 +359,8 @@ u8 nviconfig(	uint8_t 	 IRQn, uint8_t         Prio,
 /* usart.c func -------------------------------------------------------------*/
 
 typedef struct{
+	DMA_Channel_TypeDef* RxDmaCH;
+	DMA_Channel_TypeDef* TxDmaCH;
 	u8* RxCacheBuf;
 	u8* TxCacheBuf;
 	u8* RxDmaBuf;
@@ -354,13 +372,13 @@ typedef struct{
 	u16 TxBufLen;
 	u16 RxDmaLen;
 	u16 TxDmaLen;
-}_BufPointer;
+}_BufPointer,*_pBufPointer;
 
 /* usart1 */
 #define U1RXBUFLEN    	1024								//USART1 RX cache BUFFER SIZE
-#define U1TXBUFLEN    	1024								//USART1 RX cache BUFFER SIZE
-#define U1RXDMABUFLEN 	1024 	      			//USART1 RX DMA BUFFER SIZE
-#define U1TXDMABUFLEN 	1024								//USART1 TX DMA BUFFER SIZE
+#define U1TXBUFLEN    	U1RXBUFLEN								//USART1 RX cache BUFFER SIZE
+#define U1RXDMABUFLEN 	U1RXBUFLEN 	      			//USART1 RX DMA BUFFER SIZE
+#define U1TXDMABUFLEN 	U1RXBUFLEN								//USART1 TX DMA BUFFER SIZE
 #define U1RXDMACH DMA1_Channel5						//USART1 RX DMA CHANNEL
 #define U1TXDMACH DMA1_Channel4					  //USART1 TX DMA CHANNEL
 #define U1PERIADDR (u32)(&USART1->DR) 		//USART1 DMA Peripheral Address
@@ -368,9 +386,9 @@ typedef struct{
 
 /* usart2 */
 #define U2RXBUFLEN    	1024								//USART2 RX cache BUFFER SIZE
-#define U2TXBUFLEN    	1024								//USART2 RX cache BUFFER SIZE
-#define U2RXDMABUFLEN 	1024 	      			//USART2 RX DMA BUFFER SIZE
-#define U2TXDMABUFLEN 	1024								//USART2 TX DMA BUFFER SIZE
+#define U2TXBUFLEN    	U2RXBUFLEN								//USART2 RX cache BUFFER SIZE
+#define U2RXDMABUFLEN 	U2RXBUFLEN 	      			//USART2 RX DMA BUFFER SIZE
+#define U2TXDMABUFLEN 	U2RXBUFLEN								//USART2 TX DMA BUFFER SIZE
 #define U2RXDMACH DMA1_Channel6						//USART2 RX DMA CHANNEL
 #define U2TXDMACH DMA1_Channel7						//USART2 TX DMA CHANNEL
 #define U2PERIADDR (u32)(&USART2->DR) 		//USART2 DMA Peripheral Address
@@ -379,14 +397,15 @@ typedef struct{
 
 /* usart3 */
 #define U3RXBUFLEN    	1024								//USART3 RX cache BUFFER SIZE
-#define U3TXBUFLEN    	1024								//USART3 RX cache BUFFER SIZE
-#define U3RXDMABUFLEN 	1024 	      			//USART3 RX DMA BUFFER SIZE
-#define U3TXDMABUFLEN 	1024								//USART3 TX DMA BUFFER SIZE
+#define U3TXBUFLEN    	U3RXBUFLEN								//USART3 RX cache BUFFER SIZE
+#define U3RXDMABUFLEN 	U3RXBUFLEN 	      			//USART3 RX DMA BUFFER SIZE
+#define U3TXDMABUFLEN 	U3RXBUFLEN								//USART3 TX DMA BUFFER SIZE
 #define U3RXDMACH DMA1_Channel3						//USART3 RX DMA CHANNEL
 #define U3TXDMACH DMA1_Channel2						//USART3 TX DMA CHANNEL
 #define U3PERIADDR (u32)(&USART3->DR) 		//USART3 DMA Peripheral Address
 #define IS_U3TX_DATA_LEN_LEGAL(LEN) (LEN<=U3TXBUFLEN)	
 
+#define IS_UXTX_DATA_LEN_LEGAL(LEN,MAXLEN) (LEN<=MAXLEN)	
 
 u8 usartCfg( GPIO_TypeDef* GPIOx, USART_TypeDef* USARTx,
 						uint16_t GPIO_Pin_Rx, uint16_t GPIO_Pin_Tx,
@@ -404,10 +423,13 @@ u8 usartDmaCfg(	DMA_Channel_TypeDef* Channel, USART_TypeDef* USARTx,
 
 u8 usartMaintain(DMA_Channel_TypeDef* DMAy_Cx_Tx, DMA_Channel_TypeDef* DMAy_Cx_Rx,
 													uint16_t* TxLen, FlagStatus* DMATxFinFlag);
+u8 usartMaintain_VB(_pBufPointer pBuff);
 u8 eia485Maintain(DMA_Channel_TypeDef* DMAy_Cx_Tx, DMA_Channel_TypeDef* DMAy_Cx_Rx,
 													uint16_t* TxLen, FlagStatus* DMATxFinFlag, _pDlyfun dlySwiRT);
+u8 eia485Maintain_VB(_pBufPointer pBuff, _pDlyfun dlySwiRT);
 u8 clearUsartSRDR(USART_TypeDef* USARTx);
-u8 usart_send( u8* TarBuf, u8* SrcBuf, u16 Len, u16* indexTxcb, u16 txBuflen );
+u8 usart_send(u8* TarBuf, const u8* SrcBuf, u16 Len, u16* indexTxcb, u16 txBuflen);
+u8 usart_send_VB(_pBufPointer pBuff, const u8* SrcBuf, u16 Len);
 
 u8 usart_printf( void* SrcBuf ); // realization in app files
 u8 maintainDataFlow(void);       // realization in app files

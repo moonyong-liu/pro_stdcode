@@ -362,7 +362,7 @@ static u8 axesDetc(_TimrValus* values, _JZflag* axesFlag)
 	if( values->Pair == MAGNETICA ){
 		if( (values->Lock != MAGNETICB) && (values->Lock > RESET) ){      // if detect Failed
 			values->Counter = RESET;
-			axesFlag->MissMagnA++;              // Miss magnetic A 
+			axesFlag->MissMagnB++;              // Miss magnetic B 
 		}
 		/* Lock, gettim, counter+1, clear */
 		axesDetcStep1(values,MAGNETICA);
@@ -371,7 +371,7 @@ static u8 axesDetc(_TimrValus* values, _JZflag* axesFlag)
 	else if( values->Pair == MAGNETICB ){
 		if( (values->Lock != MAGNETICA) && (values->Lock > RESET)){			// if detect Failed
 			values->Counter = RESET;
-			axesFlag->MissMagnB++;							// Miss magnetic B
+			axesFlag->MissMagnA++;							// Miss magnetic A
 		}
 		/* Lock, gettim, counter+1, clear */
 		axesDetcStep1(values,MAGNETICB);
@@ -408,8 +408,8 @@ static u8 axesDetc(_TimrValus* values, _JZflag* axesFlag)
 	}
 	/* Detectioin lost axes */
 	/* Single axis speed detec */
-	else if(0){
-		
+	else if( values->Counter >= DETECAXIS ){
+		values->DetecFlag |= DETECFLG_AXIS;
 	}
 	return SUCCESS;
 }

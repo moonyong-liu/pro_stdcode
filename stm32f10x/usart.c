@@ -8,6 +8,11 @@
   ******************************************************************************
   * @attention
 	* @updateRecord
+	# who: lhw | when: 20170914 | content:
+	1. add usartMaintain_VB(),usart_send_VB(),eia485Maintain_VB()
+	2. modi usart_send(),usartMaintain();
+	# who: lhw | when: 20170913 | content:
+	1. modi usart_send() u8* SrcBuf -> const u8* SrcBuf
 	# who: lhw | when: 20170825 | content:
 	1. add eia485Maintain()
 	# who: lhw | when: 20170731 | content:
@@ -39,14 +44,12 @@
   * @retval SUCCESS/ERROR
   * @note 	public use
   */
-u8 usart_send( u8* TarBuf, u8* SrcBuf, u16 Len, u16* indexTxcb, u16 txBuflen )
+u8 usart_send( u8* TarBuf, const u8* SrcBuf, u16 Len, u16* indexTxcb, u16 txBuflen )
 {
 	u16 i=0;
 	u16 tmplen;
 	tmplen = Len;
-	
 	assert_param(IS_U3TX_DATA_LEN_LEGAL(Len));
-	
 	while(tmplen--){
 		if( *indexTxcb >= txBuflen ){
 			*indexTxcb = RESET;           // loop filling
@@ -54,6 +57,23 @@ u8 usart_send( u8* TarBuf, u8* SrcBuf, u16 Len, u16* indexTxcb, u16 txBuflen )
 		}
 		TarBuf[*indexTxcb] = SrcBuf[i++];
 		(*indexTxcb)++;
+	}
+	return SUCCESS;
+}
+
+u8 usart_send_VB( _pBufPointer pBuff, const u8* SrcBuf, u16 Len )
+{
+	u16 i=0;
+	u16 tmplen;
+	tmplen = Len;
+	assert_param(IS_UXTX_DATA_LEN_LEGAL(Len,pBuff->TxBufLen));
+	while(tmplen--){
+		if( *pBuff->TxIndex >= pBuff->TxBufLen ){
+			*pBuff->TxIndex = RESET;           // loop filling
+			//*pBuff->TxIndex = pBuff->TxBufLen-1;      // throw away
+		}
+		pBuff->TxDmaBuf[*pBuff->TxIndex] = SrcBuf[i++];
+		(*pBuff->TxIndex)++;
 	}
 	return SUCCESS;
 }
@@ -175,6 +195,23 @@ u8 usartMaintain(DMA_Channel_TypeDef* DMAy_Cx_Tx, DMA_Channel_TypeDef* DMAy_Cx_R
 	}
 	return SUCCESS;
 }
+u8 usartMaintain_VB(_pBufPointer pBuff)
+{
+	if( DMA_GetCurrDataCounter(pBuff->RxDmaCH) != pBuff->RxDmaLen ){
+		return ERROR;
+	}
+	if(*pBuff->DMATxFlg == SET){
+		*pBuff->DMATxFlg = RESET;
+		DMA_Cmd(pBuff->TxDmaCH, DISABLE);
+		DMA_SetCurrDataCounter(pBuff->TxDmaCH,*pBuff->TxIndex);
+		*pBuff->TxIndex = RESET;		
+		DMA_Cmd(pBuff->TxDmaCH, ENABLE);	
+	}
+	else{
+		return ERROR;
+	}
+	return SUCCESS;
+}
 
 /**
   * @brief	USARTx-EIA485 data maintain.
@@ -196,6 +233,24 @@ u8 eia485Maintain(DMA_Channel_TypeDef* DMAy_Cx_Tx, DMA_Channel_TypeDef* DMAy_Cx_
 		DMA_Cmd(DMAy_Cx_Tx, ENABLE);	
 		dlySwiRT(*TxLen);
 		*TxLen = RESET;
+	}
+	else{
+		return ERROR;
+	}
+	return SUCCESS;
+}
+
+u8 eia485Maintain_VB(_pBufPointer pBuff, _pDlyfun dlySwiRT)
+{
+	if( DMA_GetCurrDataCounter(pBuff->RxDmaCH) != pBuff->RxDmaLen ){
+		return ERROR;
+	}
+	if(*pBuff->DMATxFlg == SET){
+		*pBuff->DMATxFlg = RESET;
+		DMA_Cmd(pBuff->TxDmaCH, DISABLE);
+		DMA_SetCurrDataCounter(pBuff->TxDmaCH,*pBuff->TxIndex);
+		*pBuff->TxIndex = RESET;		
+		DMA_Cmd(pBuff->TxDmaCH, ENABLE);	
 	}
 	else{
 		return ERROR;
